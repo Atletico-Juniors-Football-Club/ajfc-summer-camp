@@ -123,7 +123,6 @@ export async function getAllActiveData(): Promise<ChildData[]> {
       *,
       availability (*)
     `)
-    .eq('active', true)
     .order('created_at', { ascending: false });
 
   if (error) throw error;

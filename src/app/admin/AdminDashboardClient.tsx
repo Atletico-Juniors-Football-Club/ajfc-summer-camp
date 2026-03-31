@@ -316,6 +316,9 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                                 <th>Parent</th>
                                 <th>Contact</th>
                                 <th>Selected Days</th>
+                                <th>Notes</th>
+                                <th>Registered At</th>
+                                <th>Status</th>
                                 <th style={{ textAlign: 'right' }}>Actions</th>
                             </tr>
                         </thead>
@@ -337,6 +340,19 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                                             return a.day;
                                         }).join(', ')}
                                     </td>
+                                    <td style={{ fontSize: '0.85rem', maxWidth: '200px' }}>
+                                        {child.notes || '-'}
+                                    </td>
+                                    <td style={{ fontSize: '0.85rem', color: '#6B7280' }}>
+                                        {child.created_at ? new Date(child.created_at).toLocaleDateString() : '-'}
+                                    </td>
+                                    <td>
+                                        {child.active ? (
+                                            <span style={{ color: '#16A34A', fontWeight: 600, fontSize: '0.85rem' }}>Active</span>
+                                        ) : (
+                                            <span style={{ color: '#EF4444', fontWeight: 600, fontSize: '0.85rem' }}>Deleted</span>
+                                        )}
+                                    </td>
                                     <td style={{ textAlign: 'right' }}>
                                         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                                             <Link href={`/edit/${child.id}`} className="btn btn-outline" style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem', borderRadius: '4px' }}>
@@ -351,7 +367,7 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                             ))}
                             {filteredData.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#6B7280' }}>
+                                    <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#6B7280' }}>
                                         No children registered yet.
                                     </td>
                                 </tr>
