@@ -315,7 +315,7 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
             )}
 
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem' }}>
+            <div className="admin-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem' }}>
                 <div>
                     <h1 style={{ color: '#0B3C5D', fontSize: '2rem', fontWeight: 800, marginBottom: '0.25rem' }}>
                         Coach Dashboard
@@ -330,7 +330,7 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
             </div>
 
             {/* Stats Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+            <div className="stats-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
                 <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1.5rem' }}>
                     <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284C7' }}>
                         <Users size={28} />
@@ -398,7 +398,7 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
             </div>
 
             {/* Segmented Control */}
-            <div style={{ display: 'flex', gap: '0.5rem', backgroundColor: '#F3F4F6', padding: '0.35rem', borderRadius: '8px', width: 'fit-content', marginBottom: '2rem' }}>
+            <div className="segmented-control" style={{ display: 'flex', gap: '0.5rem', backgroundColor: '#F3F4F6', padding: '0.35rem', borderRadius: '8px', width: 'fit-content', marginBottom: '2rem' }}>
                 <button
                     onClick={() => setActiveTab('consolidated')}
                     style={{
@@ -426,7 +426,7 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
             </div>
 
             {activeTab === 'consolidated' && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '1.5rem' }}>
+                <div className="consolidated-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '1.5rem' }}>
                     {/* Best Practice Days List */}
                     <div className="card" style={{ padding: '0', overflow: 'hidden', border: 'none', backgroundColor: 'transparent', boxShadow: 'none' }}>
                         <div className="card" style={{ marginBottom: 0 }}>

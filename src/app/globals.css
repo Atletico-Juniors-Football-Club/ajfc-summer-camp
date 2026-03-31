@@ -360,3 +360,76 @@ textarea::placeholder {
 .text-primary {
   color: var(--color-primary);
 }
+
+/* ── Admin Dashboard Mobile Responsive ── */
+
+/* Stack admin header title + button vertically on small screens */
+@media (max-width: 640px) {
+  .admin-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 1rem !important;
+  }
+
+  .admin-header .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Consolidated view: side-by-side → stacked */
+@media (max-width: 900px) {
+  .consolidated-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Stats cards: reduce minwidth so they fit 2-up on tablet */
+@media (max-width: 640px) {
+  .stats-cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Segmented control: full width on mobile */
+@media (max-width: 480px) {
+  .segmented-control {
+    width: 100% !important;
+  }
+
+  .segmented-control button {
+    flex: 1;
+  }
+}
+
+/* Table: reduce cell padding on mobile */
+@media (max-width: 768px) {
+  .table th,
+  .table td {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.82rem;
+  }
+}
+
+/* Calendar grid cells: make text/gaps tighter on mobile */
+@media (max-width: 480px) {
+  .calendar-grid {
+    gap: 0.25rem;
+  }
+
+  .calendar-day-header {
+    font-size: 0.7rem;
+    padding-bottom: 0.25rem;
+  }
+}
+
+/* Main content: reduce padding on mobile */
+@media (max-width: 640px) {
+  .main-content {
+    padding: 1.5rem 0;
+  }
+
+  .card {
+    padding: 1.25rem;
+  }
+}

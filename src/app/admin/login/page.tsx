@@ -13,7 +13,7 @@ export default async function AdminLogin() {
     }
 
     return (
-        <div className="container" style={{ maxWidth: '400px', marginTop: '4rem' }}>
+        <div className="container" style={{ maxWidth: '400px', marginTop: '2rem', padding: '0 1rem' }}>
             <div className="card">
                 <h2 style={{ marginBottom: '1.5rem', color: 'var(--color-primary)' }}>Coach Login</h2>
                 <form action={login}>
