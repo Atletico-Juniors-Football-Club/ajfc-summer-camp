@@ -17,12 +17,12 @@ export default async function EditPage({ params }: { params: Promise<{ id: strin
         notFound();
     }
 
-    const sub = getSubmissionById.get(submissionId) as Submission | undefined;
+    const sub = await getSubmissionById(submissionId);
     if (!sub) {
         notFound();
     }
 
-    const avail = getAvailabilityBySubmissionId.all(submissionId) as Availability[];
+    const avail = await getAvailabilityBySubmissionId(submissionId);
 
     const childData: ChildData = {
         ...sub,

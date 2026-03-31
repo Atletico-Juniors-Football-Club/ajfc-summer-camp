@@ -329,7 +329,13 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                                         {child.parent_phone} <br /> {child.parent_email}
                                     </td>
                                     <td style={{ fontSize: '0.85rem', maxWidth: '300px' }}>
-                                        {child.availability.map(a => a.day).join(', ')}
+                                        {child.availability.map(a => {
+                                            const parts = a.day.split('-');
+                                            if (parts.length === 3) {
+                                                return `${monthNames[parseInt(parts[1], 10) - 1]} ${parts[2]}`;
+                                            }
+                                            return a.day;
+                                        }).join(', ')}
                                     </td>
                                     <td style={{ textAlign: 'right' }}>
                                         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>

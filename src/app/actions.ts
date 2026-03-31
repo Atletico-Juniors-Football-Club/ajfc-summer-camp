@@ -6,9 +6,9 @@ import { revalidatePath } from 'next/cache';
 export async function submitAvailabilityAction(data: any) {
     try {
         if (data.id) {
-            updateChildData(data as ChildData);
+            await updateChildData(data as ChildData);
         } else {
-            saveChildData(data as ChildData);
+            await saveChildData(data as ChildData);
         }
         revalidatePath('/admin');
         return { success: true };
@@ -19,7 +19,7 @@ export async function submitAvailabilityAction(data: any) {
 
 export async function deleteSubmissionAction(id: number) {
     try {
-        deactivateSubmission.run(id);
+        await deactivateSubmission(id);
         revalidatePath('/admin');
         return { success: true };
     } catch (error: any) {

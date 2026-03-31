@@ -1,35 +1,9 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { createClient } from '@supabase/supabase-js';
 
-const dbPath = path.resolve(process.cwd(), 'ajfc.sqlite');
-const db = new Database(dbPath);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-// Initialize schema
-db.exec(`
-  CREATE TABLE IF NOT EXISTS submissions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    parent_name TEXT NOT NULL,
-    parent_phone TEXT,
-    parent_email TEXT,
-    child_name TEXT NOT NULL,
-    child_age INTEGER,
-    notes TEXT,
-    active BOOLEAN DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS availability (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    submission_id INTEGER NOT NULL,
-    day TEXT NOT NULL,
-    time_slot TEXT NOT NULL,
-    FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE
-  );
-`);
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export interface Submission {
   id?: number;
@@ -55,111 +29,134 @@ export interface ChildData extends Submission {
   availability: Availability[];
 }
 
-export const insertSubmission = db.prepare(`
-  INSERT INTO submissions (parent_name, parent_phone, parent_email, child_name, child_age, notes, active)
-  VALUES (@parent_name, @parent_phone, @parent_email, @child_name, @child_age, @notes, 1)
-`);
+export async function saveChildData(data: ChildData) {
+  // Invalidate existing active submissions for the exact same child name
+  await supabase
+    .from('submissions')
+    .update({ active: false })
+    .ilike('child_name', data.child_name);
 
-export const updateSubmissionInfo = db.prepare(`
-  UPDATE submissions 
-  SET parent_name = @parent_name, parent_phone = @parent_phone, parent_email = @parent_email, child_name = @child_name, child_age = @child_age, notes = @notes, updated_at = CURRENT_TIMESTAMP
-  WHERE id = @id
-`);
+  // Insert new submission
+  const { data: subData, error: subError } = await supabase
+    .from('submissions')
+    .insert({
+      parent_name: data.parent_name,
+      parent_phone: data.parent_phone,
+      parent_email: data.parent_email,
+      child_name: data.child_name,
+      child_age: data.child_age,
+      notes: data.notes || '',
+      active: true,
+    })
+    .select()
+    .single();
 
-export const deleteSubmissionAvailability = db.prepare(`
-  DELETE FROM availability WHERE submission_id = @submission_id
-`);
+  if (subError) throw subError;
 
-export const insertAvailability = db.prepare(`
-  INSERT INTO availability (submission_id, day, time_slot)
-  VALUES (@submission_id, @day, @time_slot)
-`);
+  const submission_id = subData.id;
 
-export const getSubmissions = db.prepare(`
-  SELECT * FROM submissions WHERE active = 1 ORDER BY created_at DESC
-`);
-
-export const getSubmissionById = db.prepare(`
-  SELECT * FROM submissions WHERE id = ?
-`);
-
-export const getAvailabilityBySubmissionId = db.prepare(`
-  SELECT * FROM availability WHERE submission_id = ?
-`);
-
-export const deactivateSubmission = db.prepare(`
-  UPDATE submissions SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-`);
-
-export const deleteSubmission = db.prepare(`
-  DELETE FROM submissions WHERE id = ?
-`);
-
-// Transaction to save a full submission
-export const saveChildData = db.transaction((data: ChildData) => {
-  // Option: invalidate existing active submissions for the exact same child name to prevent duplicates causing double counting
-  // We'll mark previous as inactive if they have the same child_name
-  db.prepare('UPDATE submissions SET active = 0 WHERE LOWER(child_name) = ?').run(data.child_name.toLowerCase());
-
-  const info = insertSubmission.run({
-    parent_name: data.parent_name,
-    parent_phone: data.parent_phone,
-    parent_email: data.parent_email,
-    child_name: data.child_name,
-    child_age: data.child_age,
-    notes: data.notes || '',
-  });
-
-  const submission_id = info.lastInsertRowid as number;
-
-  for (const slot of data.availability) {
-    if (slot.day === 'Not available') continue;
-    insertAvailability.run({
+  const availabilityToInsert = data.availability
+    .filter(slot => slot.day !== 'Not available')
+    .map(slot => ({
       submission_id,
       day: slot.day,
       time_slot: slot.time_slot
-    });
+    }));
+
+  if (availabilityToInsert.length > 0) {
+    const { error: availError } = await supabase
+      .from('availability')
+      .insert(availabilityToInsert);
+    if (availError) throw availError;
   }
 
   return submission_id;
-});
+}
 
-// Transaction to update a full submission
-export const updateChildData = db.transaction((data: ChildData) => {
+export async function updateChildData(data: ChildData) {
   if (!data.id) throw new Error('ID required for update');
 
-  updateSubmissionInfo.run({
-    id: data.id,
-    parent_name: data.parent_name,
-    parent_phone: data.parent_phone,
-    parent_email: data.parent_email,
-    child_name: data.child_name,
-    child_age: data.child_age,
-    notes: data.notes || '',
-  });
+  const { error: subError } = await supabase
+    .from('submissions')
+    .update({
+      parent_name: data.parent_name,
+      parent_phone: data.parent_phone,
+      parent_email: data.parent_email,
+      child_name: data.child_name,
+      child_age: data.child_age,
+      notes: data.notes || '',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', data.id);
 
-  deleteSubmissionAvailability.run({ submission_id: data.id });
+  if (subError) throw subError;
 
-  for (const slot of data.availability) {
-    if (slot.day === 'Not available') continue;
-    insertAvailability.run({
+  const { error: delError } = await supabase
+    .from('availability')
+    .delete()
+    .eq('submission_id', data.id);
+  
+  if (delError) throw delError;
+
+  const availabilityToInsert = data.availability
+    .filter(slot => slot.day !== 'Not available')
+    .map(slot => ({
       submission_id: data.id,
       day: slot.day,
       time_slot: slot.time_slot
-    });
+    }));
+
+  if (availabilityToInsert.length > 0) {
+    const { error: availError } = await supabase
+      .from('availability')
+      .insert(availabilityToInsert);
+    if (availError) throw availError;
   }
 
   return data.id;
-});
-
-export function getAllActiveData(): ChildData[] {
-  const subs = getSubmissions.all() as Submission[];
-  return subs.map(sub => {
-    const avail = getAvailabilityBySubmissionId.all(sub.id) as Availability[];
-    return { ...sub, availability: avail };
-  });
 }
 
-// Optional: Mock data seed logic has been removed as per user request.
+export async function getAllActiveData(): Promise<ChildData[]> {
+  const { data, error } = await supabase
+    .from('submissions')
+    .select(`
+      *,
+      availability (*)
+    `)
+    .eq('active', true)
+    .order('created_at', { ascending: false });
 
-export default db;
+  if (error) throw error;
+  return data as ChildData[];
+}
+
+export async function getSubmissionById(id: number): Promise<Submission | undefined> {
+  const { data, error } = await supabase
+    .from('submissions')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error || !data) return undefined;
+  return data as Submission;
+}
+
+export async function getAvailabilityBySubmissionId(id: number): Promise<Availability[]> {
+  const { data, error } = await supabase
+    .from('availability')
+    .select('*')
+    .eq('submission_id', id);
+
+  if (error || !data) return [];
+  return data as Availability[];
+}
+
+export async function deactivateSubmission(id: number) {
+  const { error } = await supabase
+    .from('submissions')
+    .update({ active: false, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export default supabase;

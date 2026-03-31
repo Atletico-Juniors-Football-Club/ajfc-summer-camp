@@ -9,8 +9,8 @@ export default async function AdminDashboard() {
         redirect('/admin/login');
     }
 
-    const allData = getAllActiveData(); // fetching from SQLite directly on server
-
+    const allData = await getAllActiveData(); // fetching from Supabase directly on server
+    
     return (
         <div className="container">
             <AdminDashboardClient initialData={allData} />
