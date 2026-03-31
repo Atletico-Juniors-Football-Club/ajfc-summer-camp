@@ -5,7 +5,7 @@ export default async function AdminLogin() {
     async function login(formData: FormData) {
         'use server'
         const password = formData.get('password');
-        if (password === 'coach123') { // Simple mock password
+        if (password === process.env.COACH_PASSWORD) {
             const cookieStore = await cookies();
             cookieStore.set('coach-auth', 'true', { path: '/' });
             redirect('/admin');
@@ -19,7 +19,7 @@ export default async function AdminLogin() {
                 <form action={login}>
                     <div className="form-group">
                         <label className="form-label">Password</label>
-                        <input type="password" name="password" className="form-control" required placeholder="Hint: coach123" />
+                        <input type="password" name="password" className="form-control" required placeholder="Enter password" />
                     </div>
                     <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
                         Login
