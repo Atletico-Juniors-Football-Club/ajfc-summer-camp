@@ -382,6 +382,15 @@ textarea::placeholder {
   .consolidated-grid {
     grid-template-columns: 1fr !important;
   }
+
+  /* Calendar (2nd child) floats above the Best Practice list (1st child) on mobile */
+  .consolidated-grid > *:first-child {
+    order: 2;
+  }
+
+  .consolidated-grid > *:last-child {
+    order: 1;
+  }
 }
 
 /* Stats cards: reduce minwidth so they fit 2-up on tablet */
