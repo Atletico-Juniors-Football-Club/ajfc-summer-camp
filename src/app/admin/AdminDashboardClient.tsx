@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, Calendar as CalendarIcon, Trophy, Plus } from 'lucide-react';
+import { Users, Calendar as CalendarIcon, Trophy, Plus, X } from 'lucide-react';
 import type { ChildData } from '@/lib/db';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -16,12 +16,19 @@ const daysOfWeek = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const dayNamesFull = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+interface SelectedDayPopup {
+    dateStr: string;       // 'YYYY-MM-DD'
+    formatted: string;     // 'Apr 01, 2026'
+    dayName: string;       // 'Wednesday'
+    children: ChildData[];
+}
+
 export default function AdminDashboardClient({ initialData }: { initialData: ChildData[] }) {
     const router = useRouter();
     const [data, setData] = useState<ChildData[]>(initialData);
     const [activeTab, setActiveTab] = useState<'consolidated' | 'list'>('consolidated');
+    const [popup, setPopup] = useState<SelectedDayPopup | null>(null);
 
-    // We skip filtering for now to keep the UI clean like the screenshot, but keep standard search state if needed
     const filteredData = data;
 
     // Compute stats
@@ -29,7 +36,6 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
         const dayCounts = new Map<string, number>();
 
         filteredData.forEach(child => {
-            // For each child, find all unique days they selected
             const uniqueDays = new Set<string>();
             child.availability.forEach(a => {
                 if (a.time_slot !== 'Not available') {
@@ -43,8 +49,8 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
 
         const rankedDays = Array.from(dayCounts.entries())
             .map(([date, count]) => {
-                // parse date 'YYYY-MM-DD' to get day of week
-                const dObj = new Date(date);
+                const parts = date.split('-');
+                const dObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
                 const dayName = dayNamesFull[dObj.getDay()];
                 const monthName = monthNames[dObj.getMonth()];
                 const dayOfMonth = dObj.getDate();
@@ -71,10 +77,32 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
         return { rankedDays, bestDay, top3Avg, dayCounts, maxCount };
     }, [filteredData]);
 
+    // Get children available on a given date string (YYYY-MM-DD)
+    const getChildrenForDate = (dateStr: string): ChildData[] => {
+        return filteredData.filter(child =>
+            child.availability.some(a => a.day === dateStr && a.time_slot !== 'Not available')
+        );
+    };
+
+    const openPopup = (dateStr: string) => {
+        const parts = dateStr.split('-');
+        const dObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        const dayName = dayNamesFull[dObj.getDay()];
+        const monthName = monthNames[dObj.getMonth()];
+        const dayOfMonth = String(dObj.getDate()).padStart(2, '0');
+        const year = dObj.getFullYear();
+
+        setPopup({
+            dateStr,
+            formatted: `${monthName} ${dayOfMonth}, ${year}`,
+            dayName,
+            children: getChildrenForDate(dateStr),
+        });
+    };
+
     const handleDelete = async (id?: number) => {
         if (!id || !confirm('Are you sure you want to delete this submission?')) return;
         
-        // Direct client-side Supabase DELETE — visible in browser Network tab
         const { error } = await supabase
             .from('submissions')
             .delete()
@@ -97,12 +125,7 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
 
     const getHeatmapStyle = (count: number) => {
         if (count === 0) return {};
-
-        // Scale intensity
         const intensity = Math.max(0.2, count / aggregate.maxCount);
-
-        // Use an RGBA based on the green brand color
-        // E.g., rgba(47, 143, 47, intensity)
         return {
             backgroundColor: `rgba(47, 143, 47, ${intensity})`,
             color: intensity > 0.5 ? '#FFFFFF' : '#1A1A1A',
@@ -113,12 +136,8 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
     const renderMonth = (year: number, month: number, title: string) => {
         const { firstDay, daysInMonth } = buildMonthStats(year, month);
         const cells = [];
-        for (let i = 0; i < firstDay; i++) {
-            cells.push(null);
-        }
-        for (let i = 1; i <= daysInMonth; i++) {
-            cells.push(i);
-        }
+        for (let i = 0; i < firstDay; i++) cells.push(null);
+        for (let i = 1; i <= daysInMonth; i++) cells.push(i);
 
         return (
             <div className="card" style={{ padding: '1.5rem 1rem' }}>
@@ -134,7 +153,6 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                         const mStr = String(month + 1).padStart(2, '0');
                         const dStr = String(dayNum).padStart(2, '0');
                         const dateStr = `${year}-${mStr}-${dStr}`;
-
                         const count = aggregate.dayCounts.get(dateStr) || 0;
                         const style = getHeatmapStyle(count);
 
@@ -142,12 +160,18 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                             <div
                                 key={dateStr}
                                 className="calendar-cell"
+                                onClick={() => count > 0 && openPopup(dateStr)}
                                 style={{
                                     flexDirection: 'column',
                                     gap: '2px',
                                     ...style,
-                                    backgroundColor: count > 0 ? style.backgroundColor : '#F3F4F6'
+                                    backgroundColor: count > 0 ? style.backgroundColor : '#F3F4F6',
+                                    cursor: count > 0 ? 'pointer' : 'default',
+                                    transition: 'transform 0.1s ease, box-shadow 0.1s ease',
                                 }}
+                                title={count > 0 ? `Click to see ${count} available kid${count !== 1 ? 's' : ''}` : ''}
+                                onMouseEnter={e => { if (count > 0) (e.currentTarget as HTMLElement).style.transform = 'scale(1.08)'; }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; }}
                             >
                                 <span style={{ fontSize: '0.95rem', fontWeight: count > 0 ? 700 : 500 }}>{dayNum}</span>
                                 {count > 0 && (
@@ -163,6 +187,90 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
 
     return (
         <div style={{ padding: '2rem 0' }}>
+
+            {/* ── Popup Modal ── */}
+            {popup && (
+                <div
+                    onClick={() => setPopup(null)}
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 1000,
+                        backgroundColor: 'rgba(0,0,0,0.45)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: '1rem',
+                        backdropFilter: 'blur(2px)',
+                    }}
+                >
+                    <div
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                            background: '#FFFFFF',
+                            borderRadius: '16px',
+                            padding: '2rem',
+                            width: '100%',
+                            maxWidth: '480px',
+                            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+                            animation: 'popIn 0.18s ease',
+                        }}
+                    >
+                        {/* Modal header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                            <div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.2rem' }}>
+                                    Available Children
+                                </div>
+                                <h2 style={{ margin: 0, color: '#0B3C5D', fontSize: '1.4rem', fontWeight: 800 }}>
+                                    {popup.dayName}
+                                </h2>
+                                <div style={{ color: '#6B7280', fontSize: '0.9rem', marginTop: '0.15rem' }}>{popup.formatted}</div>
+                            </div>
+                            <button
+                                onClick={() => setPopup(null)}
+                                style={{ background: '#F3F4F6', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6B7280' }}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        {/* Count badge */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                            <div style={{ backgroundColor: '#DCFCE7', color: '#16A34A', borderRadius: '999px', padding: '0.25rem 0.85rem', fontWeight: 700, fontSize: '0.9rem' }}>
+                                {popup.children.length} kid{popup.children.length !== 1 ? 's' : ''} available
+                            </div>
+                        </div>
+
+                        {/* Children list */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '320px', overflowY: 'auto' }}>
+                            {popup.children.length === 0 ? (
+                                <div style={{ textAlign: 'center', color: '#6B7280', padding: '2rem' }}>No children available this day.</div>
+                            ) : popup.children.map(child => (
+                                <div key={child.id} style={{
+                                    display: 'flex', alignItems: 'center', gap: '1rem',
+                                    padding: '0.85rem 1rem',
+                                    backgroundColor: '#F9FAFB',
+                                    border: '1px solid #E5E7EB',
+                                    borderRadius: '10px',
+                                }}>
+                                    {/* Avatar */}
+                                    <div style={{
+                                        width: '40px', height: '40px', borderRadius: '50%',
+                                        backgroundColor: '#0B3C5D', color: 'white',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontWeight: 700, fontSize: '1rem', flexShrink: 0,
+                                    }}>
+                                        {child.child_name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <div style={{ fontWeight: 700, color: '#1A1A1A', fontSize: '0.95rem' }}>{child.child_name}</div>
+                                        {child.parent_name && child.parent_name !== 'Not Provided' && (
+                                            <div style={{ color: '#6B7280', fontSize: '0.8rem' }}>Parent: {child.parent_name}</div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem' }}>
@@ -181,8 +289,6 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
 
             {/* Stats Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
-
-                {/* Stat 1 */}
                 <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1.5rem' }}>
                     <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#E0F2FE', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284C7' }}>
                         <Users size={28} />
@@ -193,7 +299,6 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                     </div>
                 </div>
 
-                {/* Stat 2 */}
                 <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1.5rem' }}>
                     <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
                         <CalendarIcon size={28} />
@@ -207,7 +312,6 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                     </div>
                 </div>
 
-                {/* Stat 3 */}
                 <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1.5rem' }}>
                     <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#FEF9C3', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#CA8A04' }}>
                         <Trophy size={28} />
@@ -220,7 +324,6 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                         </div>
                     </div>
                 </div>
-
             </div>
 
             {/* Segmented Control */}
@@ -228,11 +331,7 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                 <button
                     onClick={() => setActiveTab('consolidated')}
                     style={{
-                        padding: '0.5rem 1.5rem',
-                        borderRadius: '6px',
-                        fontWeight: 600,
-                        fontSize: '0.9rem',
-                        border: 'none',
+                        padding: '0.5rem 1.5rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.9rem', border: 'none',
                         backgroundColor: activeTab === 'consolidated' ? '#FFFFFF' : 'transparent',
                         color: activeTab === 'consolidated' ? '#0B3C5D' : '#6B7280',
                         boxShadow: activeTab === 'consolidated' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
@@ -244,11 +343,7 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                 <button
                     onClick={() => setActiveTab('list')}
                     style={{
-                        padding: '0.5rem 1.5rem',
-                        borderRadius: '6px',
-                        fontWeight: 600,
-                        fontSize: '0.9rem',
-                        border: 'none',
+                        padding: '0.5rem 1.5rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.9rem', border: 'none',
                         backgroundColor: activeTab === 'list' ? '#FFFFFF' : 'transparent',
                         color: activeTab === 'list' ? '#0B3C5D' : '#6B7280',
                         boxShadow: activeTab === 'list' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
@@ -265,30 +360,39 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                     <div className="card" style={{ padding: '0', overflow: 'hidden', border: 'none', backgroundColor: 'transparent', boxShadow: 'none' }}>
                         <div className="card" style={{ marginBottom: 0 }}>
                             <h2 style={{ color: '#0B3C5D', fontSize: '1.25rem', marginBottom: '0.25rem', fontWeight: 800 }}>Best Practice Days</h2>
-                            <p style={{ color: '#6B7280', fontSize: '0.85rem', marginBottom: '1.5rem' }}>Top recommendations based on attendance.</p>
+                            <p style={{ color: '#6B7280', fontSize: '0.85rem', marginBottom: '1.5rem' }}>Click a day to see who&apos;s available.</p>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                 {aggregate.rankedDays.slice(0, 10).map((dayData, i) => (
-                                    <div key={i} style={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        padding: '1rem',
-                                        backgroundColor: '#F9FAFB',
-                                        border: '1px solid #E5E7EB',
-                                        borderRadius: '8px'
-                                    }}>
+                                    <div
+                                        key={i}
+                                        onClick={() => openPopup(dayData.date)}
+                                        style={{
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                            padding: '1rem',
+                                            backgroundColor: '#F9FAFB',
+                                            border: '1px solid #E5E7EB',
+                                            borderRadius: '8px',
+                                            cursor: 'pointer',
+                                            transition: 'background-color 0.15s ease, box-shadow 0.15s ease',
+                                        }}
+                                        onMouseEnter={e => {
+                                            (e.currentTarget as HTMLElement).style.backgroundColor = '#EFF6FF';
+                                            (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                                        }}
+                                        onMouseLeave={e => {
+                                            (e.currentTarget as HTMLElement).style.backgroundColor = '#F9FAFB';
+                                            (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+                                        }}
+                                    >
                                         <div>
                                             <div style={{ fontWeight: 700, color: '#1A1A1A', fontSize: '0.95rem' }}>{dayData.dayName}</div>
                                             <div style={{ color: '#6B7280', fontSize: '0.8rem' }}>{dayData.formatted}</div>
                                         </div>
                                         <div style={{
-                                            backgroundColor: '#DCFCE7',
-                                            color: '#16A34A',
-                                            padding: '0.35rem 0.85rem',
-                                            borderRadius: '999px',
-                                            fontWeight: 700,
-                                            fontSize: '0.9rem'
+                                            backgroundColor: '#DCFCE7', color: '#16A34A',
+                                            padding: '0.35rem 0.85rem', borderRadius: '999px',
+                                            fontWeight: 700, fontSize: '0.9rem'
                                         }}>
                                             {dayData.count}
                                         </div>
@@ -308,7 +412,6 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                         {renderMonth(2026, 3, "April 2026")}
                         {renderMonth(2026, 4, "May 2026")}
                     </div>
-
                 </div>
             )}
 
@@ -388,6 +491,8 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                 </div>
             )}
 
+            {/* Popup animation keyframe */}
+            <style>{`@keyframes popIn { from { opacity: 0; transform: scale(0.93); } to { opacity: 1; transform: scale(1); } }`}</style>
         </div>
     );
 }
