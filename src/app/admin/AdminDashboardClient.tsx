@@ -4,8 +4,13 @@ import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, Calendar as CalendarIcon, Trophy, Plus } from 'lucide-react';
 import type { ChildData } from '@/lib/db';
-import { deleteSubmissionAction } from '../actions';
+import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 const daysOfWeek = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const dayNamesFull = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -68,12 +73,18 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
 
     const handleDelete = async (id?: number) => {
         if (!id || !confirm('Are you sure you want to delete this submission?')) return;
-        const res = await deleteSubmissionAction(id);
-        if (res.success) {
+        
+        // Direct client-side Supabase DELETE — visible in browser Network tab
+        const { error } = await supabase
+            .from('submissions')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            alert('Failed to delete: ' + error.message);
+        } else {
             setData(prev => prev.filter(c => c.id !== id));
             router.refresh();
-        } else {
-            alert('Failed to delete: ' + res.error);
         }
     };
 
