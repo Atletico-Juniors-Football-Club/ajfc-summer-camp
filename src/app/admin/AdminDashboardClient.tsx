@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, Calendar as CalendarIcon, Trophy, Plus, X } from 'lucide-react';
+import { Users, Calendar as CalendarIcon, Trophy, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ChildData } from '@/lib/db';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -28,6 +28,7 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
     const [data, setData] = useState<ChildData[]>(initialData);
     const [activeTab, setActiveTab] = useState<'consolidated' | 'list'>('consolidated');
     const [popup, setPopup] = useState<SelectedDayPopup | null>(null);
+    const [weekIndex, setWeekIndex] = useState(0);
 
     const filteredData = data;
 
@@ -76,6 +77,47 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
 
         return { rankedDays, bestDay, top3Avg, dayCounts, maxCount };
     }, [filteredData]);
+
+    // Build list of all weeks (Mon-Sun) that overlap Apr-May 2026
+    const weeks = useMemo(() => {
+        // Start from Mon of the week containing Apr 1 2026
+        const start = new Date(2026, 2, 30); // Mon 30 Mar 2026
+        const end   = new Date(2026, 5, 1);  // past May 31
+        const result: { weekStart: Date; weekEnd: Date; label: string }[] = [];
+        const cur = new Date(start);
+        while (cur < end) {
+            const ws = new Date(cur);
+            const we = new Date(cur);
+            we.setDate(we.getDate() + 6);
+            const fmt = (d: Date) => `${monthNames[d.getMonth()]} ${d.getDate()}`;
+            result.push({ weekStart: ws, weekEnd: we, label: `${fmt(ws)} – ${fmt(we)}` });
+            cur.setDate(cur.getDate() + 7);
+        }
+        return result;
+    }, []);
+
+    // Best day for the currently selected week
+    const weeklyBestDay = useMemo(() => {
+        if (!weeks.length) return null;
+        const idx = Math.min(weekIndex, weeks.length - 1);
+        const { weekStart, weekEnd } = weeks[idx];
+        let best: { dateStr: string; count: number; dayName: string; shortFormatted: string } | null = null;
+        for (const [dateStr, count] of aggregate.dayCounts.entries()) {
+            const parts = dateStr.split('-');
+            const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            if (d >= weekStart && d <= weekEnd) {
+                if (!best || count > best.count) {
+                    best = {
+                        dateStr,
+                        count,
+                        dayName: dayNamesFull[d.getDay()],
+                        shortFormatted: `${monthNames[d.getMonth()]} ${d.getDate()}`,
+                    };
+                }
+            }
+        }
+        return best;
+    }, [weekIndex, weeks, aggregate.dayCounts]);
 
     // Get children available on a given date string (YYYY-MM-DD)
     const getChildrenForDate = (dateStr: string): ChildData[] => {
@@ -299,16 +341,45 @@ export default function AdminDashboardClient({ initialData }: { initialData: Chi
                     </div>
                 </div>
 
-                <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1.5rem' }}>
-                    <div style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
+                <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.25rem 1.5rem' }}>
+                    <div style={{ width: '56px', height: '56px', flexShrink: 0, borderRadius: '50%', backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
                         <CalendarIcon size={28} />
                     </div>
-                    <div>
-                        <div style={{ fontSize: '0.85rem', color: '#6B7280', fontWeight: 600 }}>Best Day Overall</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0B3C5D' }}>
-                            {aggregate.bestDay?.shortFormatted || 'N/A'}{' '}
-                            <span style={{ fontSize: '0.95rem', color: '#6B7280', fontWeight: 500 }}>({aggregate.bestDay?.count || 0} kids)</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.78rem', color: '#6B7280', fontWeight: 600, marginBottom: '0.1rem' }}>Best Day This Week</div>
+                        {/* Week label + arrows */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.25rem' }}>
+                            <button
+                                onClick={() => setWeekIndex(i => Math.max(0, i - 1))}
+                                disabled={weekIndex === 0}
+                                style={{ background: 'none', border: 'none', cursor: weekIndex === 0 ? 'default' : 'pointer', color: weekIndex === 0 ? '#D1D5DB' : '#6B7280', padding: '0', display: 'flex', alignItems: 'center' }}
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                            <span style={{ fontSize: '0.75rem', color: '#9CA3AF', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                {weeks[Math.min(weekIndex, weeks.length - 1)]?.label}
+                            </span>
+                            <button
+                                onClick={() => setWeekIndex(i => Math.min(weeks.length - 1, i + 1))}
+                                disabled={weekIndex >= weeks.length - 1}
+                                style={{ background: 'none', border: 'none', cursor: weekIndex >= weeks.length - 1 ? 'default' : 'pointer', color: weekIndex >= weeks.length - 1 ? '#D1D5DB' : '#6B7280', padding: '0', display: 'flex', alignItems: 'center' }}
+                            >
+                                <ChevronRight size={16} />
+                            </button>
                         </div>
+                        {weeklyBestDay ? (
+                            <div
+                                style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0B3C5D', cursor: 'pointer' }}
+                                onClick={() => openPopup(weeklyBestDay.dateStr)}
+                                title="Click to see who&apos;s available"
+                            >
+                                {weeklyBestDay.dayName}{' '}
+                                <span style={{ fontSize: '1rem', color: '#374151' }}>{weeklyBestDay.shortFormatted}</span>{' '}
+                                <span style={{ fontSize: '0.9rem', color: '#6B7280', fontWeight: 500 }}>({weeklyBestDay.count} kids)</span>
+                            </div>
+                        ) : (
+                            <div style={{ fontSize: '1rem', color: '#9CA3AF', fontWeight: 600 }}>No data this week</div>
+                        )}
                     </div>
                 </div>
 
